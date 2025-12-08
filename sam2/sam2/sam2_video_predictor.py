@@ -749,10 +749,10 @@ class SAM2VideoPredictor(SAM2Base):
                 output_dict["frame_score_for_mem"][frame_idx] = {}
                 #copy score to seperate dict for speedup
                 frame_output = output_dict["frame_score_for_mem"][frame_idx]
-                frame_output["best_iou_score"]  = current_out["best_iou_score"].cpu().numpy()
-                frame_output["object_score_logits"]  = current_out["object_score_logits"].cpu().numpy()
-                frame_output["kf_score"] = current_out["kf_score"].cpu().numpy()  if "kf_score" in current_out else None  
-                frame_output["rvcot_ious"] = current_out["rvcot_ious"].cpu().numpy() if "rvcot_ious" in current_out else None  
+                frame_output["best_iou_score"]  = current_out["best_iou_score"].float().cpu().numpy()
+                frame_output["object_score_logits"]  = current_out["object_score_logits"].float().cpu().numpy()
+                frame_output["kf_score"] = current_out["kf_score"].float().cpu().numpy()  if "kf_score" in current_out else None  
+                frame_output["rvcot_ious"] = current_out["rvcot_ious"].float().cpu().numpy() if "rvcot_ious" in current_out else None  
             # Create slices of per-object outputs for subsequent interaction with each
             # individual object after tracking.
             self._add_output_per_object(
@@ -879,6 +879,11 @@ class SAM2VideoPredictor(SAM2Base):
         inference_state["mask_inputs_per_obj"].clear()
         inference_state["output_dict_per_obj"].clear()
         inference_state["temp_output_dict_per_obj"].clear()
+        # Reset RVCOT memory selection state
+        if hasattr(self, "rvcot_mem_selection_highconf_frameidx"):
+            self.rvcot_mem_selection_highconf_frameidx = []
+        if hasattr(self, "rvcor_area_list"):
+            self.rvcor_area_list = []
 
     def _reset_tracking_results(self, inference_state):
         """Reset all tracking inputs and results across the videos."""
@@ -913,7 +918,10 @@ class SAM2VideoPredictor(SAM2Base):
             if inference_state.get('cot_cache_frames', None) is None:
                 inference_state['cot_cache_frames'] = {}
             if len(inference_state['cot_cache_frames'])>11:
-                inference_state['cot_cache_frames'].pop(frame_idx-11)
+                # inference_state['cot_cache_frames'].pop(frame_idx-11)
+                # Safely remove the oldest frame
+                oldest_frame = min(inference_state['cot_cache_frames'].keys())
+                inference_state['cot_cache_frames'].pop(oldest_frame)
             inference_state['cot_cache_frames'][frame_idx] = image
             
             backbone_out = self.forward_image(image)

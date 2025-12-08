@@ -165,3 +165,7 @@ visualization/*
 # For Testing
 demo/
 result/
+test-data/
+checkpoints/
+assets/
+logs/
