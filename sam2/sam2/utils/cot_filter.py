@@ -115,7 +115,7 @@ class RVCotFilter():
         non_cond_outputs = output_dict.get('non_cond_frame_outputs', {}) if output_dict else {}
         missing_cache = [f for f in frame_indices if f not in cache_frames]
         missing_outputs = [f for f in frame_indices if f != 0 and f not in non_cond_outputs]
-        if missing_cache or missing_outputs:
+        if missing_cache or missing_outputs or not frame_indices:
             return torch.zeros([3]).to(device=self.device)
 
         union_mask = cur_masks_bin[0]

@@ -530,6 +530,40 @@ def run_tracking_pass(predictor, state, frame_names, video_frames_dir, max_safe_
             mask = masks[0][0].cpu().numpy() > 0.0
             non_zero_indices = np.argwhere(mask)
             
+            # 獲取模型輸出的 object score (logits)
+            # 這是 HiM2SAM/SAM2 的內部信心度，比 mask 面積更準確
+            model_conf = 0.5 # 預設值
+            
+            # 嘗試從 state 中獲取 logits
+            try:
+                obj_idx = state["obj_id_to_idx"].get(1) # 假設 obj_id=1
+                if obj_idx is not None and "frame_score_for_mem" in state["output_dict"]:
+                    frame_scores = state["output_dict"]["frame_score_for_mem"].get(frame_idx)
+                    if frame_scores and "object_score_logits" in frame_scores:
+                        logits = frame_scores["object_score_logits"]
+                        # logits 可能是 array 或 scalar
+                        if np.ndim(logits) > 0 and len(logits) > obj_idx:
+                            logit = logits[obj_idx]
+                        else:
+                            logit = logits
+                        
+                        # Sigmoid 轉換為 0-1
+                        model_conf = 1 / (1 + np.exp(-float(logit)))
+                    elif frame_idx in state["consolidated_frame_inds"]["cond_frame_outputs"]:
+                        # 如果是 conditioning frame (初始幀)，信心度為 1.0
+                        model_conf = 1.0
+            except Exception as e:
+                # logger.warning(f"Error getting confidence: {e}")
+                pass
+
+            # 如果模型信心度太低，視為無效 (解決無 skier 場景出現框框的問題)
+            # 閾值 0.0 對應 logit 0.0 (sigmoid(0) = 0.5)，可以根據需要調整
+            # 這裡設為 0.4 (logit ~ -0.4) 以過濾掉非常不確定的預測
+            if model_conf < 0.4: 
+                 bboxes[frame_idx] = None
+                 confidences[frame_idx] = 0.0
+                 continue
+
             if len(non_zero_indices) > 0:
                 y_min, x_min = non_zero_indices.min(axis=0).tolist()
                 y_max, x_max = non_zero_indices.max(axis=0).tolist()
@@ -543,12 +577,7 @@ def run_tracking_pass(predictor, state, frame_names, video_frames_dir, max_safe_
                 
                 if is_valid:
                     bboxes[frame_idx] = bbox
-                    
-                    # 簡單的信心度計算：基於 mask 的填充比例
-                    mask_area = mask.sum()
-                    total_area = mask.size
-                    confidence = min(1.0, (mask_area / total_area) * 2)  # 縮放以便區分
-                    confidences[frame_idx] = confidence
+                    confidences[frame_idx] = model_conf
                 else:
                     # 無效的檢測，標記為 None
                     bboxes[frame_idx] = None
@@ -579,6 +608,14 @@ def main():
     num_frames = len(frame_names)
     logger.info(f"找到 {num_frames} 張影像")
     
+    # 嘗試解析起始幀索引
+    try:
+        start_frame_idx = int(os.path.splitext(frame_names[0])[0])
+        logger.info(f"起始幀索引: {start_frame_idx}")
+    except ValueError:
+        start_frame_idx = 0
+        logger.warning("無法解析起始幀索引，預設為 0")
+    
     first_img_path = os.path.join(video_frames_dir, frame_names[0])
     first_img = cv2.imread(first_img_path)
     height, width = first_img.shape[:2]
@@ -591,7 +628,18 @@ def main():
         if len(all_boxes) == 0:
             logger.error("Boxes file is empty.")
             return
-             
+        
+        # 處理數據長度不匹配或偏移問題
+        # 如果 boxes 數量遠大於 frames 數量，且起始幀索引 > 0，嘗試進行切片
+        if len(all_boxes) > num_frames and start_frame_idx > 0:
+            if start_frame_idx + num_frames <= len(all_boxes):
+                logger.info(f"檢測到數據長度差異，嘗試根據起始幀 {start_frame_idx} 進行切片...")
+                all_boxes = all_boxes[start_frame_idx : start_frame_idx + num_frames]
+                if len(all_cameras) >= start_frame_idx + num_frames:
+                    all_cameras = all_cameras[start_frame_idx : start_frame_idx + num_frames]
+            else:
+                logger.warning(f"起始幀 {start_frame_idx} 超出數據範圍，使用預設對齊")
+
         if len(all_boxes) != num_frames or len(all_cameras) != num_frames:
             logger.warning(f"Data length mismatch! Using min length...")
             max_safe_idx = min(num_frames, len(all_boxes), len(all_cameras))
@@ -609,7 +657,8 @@ def main():
 
     # 初始化 SAM 2 預測器
     logger.info(f"載入模型: {model_cfg} ...")
-    predictor = build_sam2_video_predictor(model_cfg, checkpoint_path, device=device)
+    # 增加 rvcot_mem_long_len 以強化長期記憶，解決追蹤不穩定的問題
+    predictor = build_sam2_video_predictor(model_cfg, checkpoint_path, device=device, rvcot_mem_long_len=7)
 
     logger.info("=" * 40)
     logger.info("   Bidirectional Tracking Started    ")
