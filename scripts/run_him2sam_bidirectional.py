@@ -385,16 +385,16 @@ def main(args):
                 subdirs = split_data.get("test", [])
                 if not subdirs:
                     raise Exception("Warning: 'test' list in JSON is empty. Processing all subdirectories instead.")
-
-        logger.info(f"test sequences found: {len(subdirs)}")
-        for seq_name in subdirs:
-            if seq_name == "AL0024": 
-                segments = load_segments_to_dict('/ssd6/ron/good_segments_summary.csv')
-                # 存取特定序列的特定片段
-                seg_data = segments[seq_name]
-                print(len(seg_data))
-                process_sequence(predictor, seq_name, args, logger, seg_data)
-                # break  # For debugging, process only one sequence
+        start_seq = int(args.start_seq)
+        end_seq = int(args.end_seq)
+        logger.info(f"test sequences found: {len(subdirs[start_seq:end_seq])}")
+        logger.info(f"Sequences to be processed from index {start_seq} to {end_seq}.")
+        for seq_name in subdirs[start_seq:end_seq]:
+            segments = load_segments_to_dict('/ssd6/ron/good_segments_summary.csv')
+            # 存取特定序列的特定片段
+            seg_data = segments[seq_name]
+            print(len(seg_data))
+            process_sequence(predictor, seq_name, args, logger, seg_data)
             
     # Cleanup predictor at the end
     del predictor
@@ -404,8 +404,10 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_root", required=False, default="/ssd6/ron/SkiTB/AL", help="Root directory containing sequence folders (e.g. test-data/AL/)")
-    parser.add_argument("--output_root", required=False, default="/ssd6/ron/SkiTB-test", help="Root directory for saving results")
+    parser.add_argument("--output_root", required=False, default="/ssd6/ron/SkiTB-bidirectional", help="Root directory for saving results")
     parser.add_argument("--model_path", required=False, default="/ssd6/ron/HiM2SAM/checkpoints/sam2.1_hiera_large.pt", help="Path to the HiM2SAM model checkpoint")
+    parser.add_argument("--start_seq", required=False, default=0, help="Path to the HiM2SAM model checkpoint")
+    parser.add_argument("--end_seq", required=False, default=40, help="Path to the HiM2SAM model checkpoint")
     parser.add_argument("--save_to_video", default=True, action="store_true")
     args = parser.parse_args()
     main(args)
