@@ -107,17 +107,6 @@ class RVCotFilter():
         cur_masks_bin = self.prepare_masks(cur_masks)
         #the farest frame to recap
         frame_far = max(frame_idx - self.frame_far,0) #track last 5 frames
-
-        # If the required history is missing (e.g., after a reset/restart), skip RVCOT to avoid KeyError
-        frame_indices = list(range(frame_idx-1, frame_far-1, -1))
-        cache_frames = inference_state.get('cot_cache_frames', {})
-        output_dict = inference_state.get('output_dict', {})
-        non_cond_outputs = output_dict.get('non_cond_frame_outputs', {}) if output_dict else {}
-        missing_cache = [f for f in frame_indices if f not in cache_frames]
-        missing_outputs = [f for f in frame_indices if f != 0 and f not in non_cond_outputs]
-        if missing_cache or missing_outputs or not frame_indices:
-            return torch.zeros([3]).to(device=self.device)
-
         union_mask = cur_masks_bin[0]
         for mask in cur_masks_bin[1:]:
             union_mask = union_mask | mask
@@ -127,7 +116,7 @@ class RVCotFilter():
         
         # construct inference frames : reversely
         feed_cot_video_frames = torch.stack([inference_state['cot_cache_frames'][i][0]  \
-                    for i in frame_indices ],dim=0)
+                    for i in range(frame_idx-1, frame_far-1,-1) ],dim=0)
         if self.mirrow_padding:
             reverse_frames = feed_cot_video_frames.flip(dims=[0])[1:,:,:]
             feed_cot_video_frames = torch.cat([feed_cot_video_frames,reverse_frames],dim=0)
@@ -160,15 +149,11 @@ class RVCotFilter():
 
         historical_masks = []
         #inreverse idx
-        for f in frame_indices:
+        for f in range(frame_idx-1, frame_far-1, -1):
             if f ==0:
                 his_mask = inference_state['output_dict']['cond_frame_outputs'][0]['pred_masks']
             else:
-                # Safety: skip frames that are not yet tracked
-                his_out = inference_state['output_dict']['non_cond_frame_outputs'].get(f)
-                if his_out is None:
-                    continue
-                his_mask = his_out['pred_masks']
+                his_mask = inference_state['output_dict']['non_cond_frame_outputs'][f]['pred_masks']
             his_mask = his_mask.to(self.device)
             his_mask =  torch.nn.functional.interpolate(
                 his_mask,
@@ -178,9 +163,6 @@ class RVCotFilter():
                 antialias=True,  # use antialias for downsampling
             )
             historical_masks.append(his_mask)
-
-        if len(historical_masks) == 0:
-            return torch.zeros([3]).to(self.device)
 
         cot_iou_score = self.iou_score_point_mask(pred_tracks, pred_visibility,
                                                             historical_masks,points_mask_mapping, bw=bw,)

@@ -669,7 +669,7 @@ class SAM2Base(torch.nn.Module):
                     rvcot_ious = self.rvcot_filter.predict(frame_idx, inference_state,high_res_multimasks,
                                                            iou_aggregation_method = self.rvcot_iou_aggregation_method,
                                                            sample_count=self.sample_count)
-                    # print('rvcot',frame_idx)
+                    print('rvcot',frame_idx)
                     rvcot_weighted_ious = self.rvcot_weight * rvcot_ious + (1-self.rvcot_weight)* ious
                     best_iou_inds = torch.argmax(rvcot_weighted_ious, dim=-1)
                     batch_inds = torch.arange(B, device=device)
@@ -706,7 +706,7 @@ class SAM2Base(torch.nn.Module):
                     rvcot_ious = self.rvcot_filter.predict(frame_idx, inference_state,high_res_multimasks,
                                                            iou_aggregation_method = self.rvcot_iou_aggregation_method,
                                                            sample_count = self.sample_count)
-                    # print('rvcot',frame_idx)
+                    print('rvcot',frame_idx)
                     rvcot_weighted_ious = self.rvcot_weight * rvcot_ious + (1-self.rvcot_weight)* weighted_ious
                     best_iou_inds = torch.argmax(rvcot_weighted_ious, dim=-1)
                 batch_inds = torch.arange(B, device=device)
@@ -736,7 +736,7 @@ class SAM2Base(torch.nn.Module):
                 siou = ious[0][best_iou_inds][0]
                 kiou = kf_ious[best_iou_inds][0] if kf_ious is not None else None
                 iouflag = siou > 0.8
-                if iouflag and obj_sizes_ratio >= 0.2 and obj_sizes_ratio <= 5.0 and cur_area >= 1 :
+                if iouflag and obj_sizes_ratio >= 0.8 and obj_sizes_ratio <= 1.2 and cur_area >= 1 :
                     # other mask proposals
                     alternative_masks =  [high_res_multimasks[0, i].cpu().numpy() for i in range(3) if i!=best_iou_inds]
                                      
@@ -788,7 +788,7 @@ class SAM2Base(torch.nn.Module):
                 iou_list.sort(reverse=True)
                 iou_ratio = iou_list[0] / iou_list[1]
                 siou_ratio_flag = (iou_ratio > self.rvcot_siou_ratio_threshold)
-                if siou_ratio_flag and obj_sizes_ratio >= 0.2 and obj_sizes_ratio <= 5.0 and iouflag and  cur_area >= 1 :
+                if siou_ratio_flag and obj_sizes_ratio >= 0.75 and obj_sizes_ratio <= 1.25 and iouflag and  cur_area >= 1 :
                     # hsdf dist constraint
                     chosen_mask_np = (high_res_multimasks[0, best_iou_inds[0]]>0).cpu().numpy().astype(np.uint8).copy()
                     alternative_masks =  [(high_res_multimasks[0, i]>0).cpu().numpy().astype(np.uint8) for i in range(3) if i!=best_iou_inds]
@@ -1069,42 +1069,41 @@ class SAM2Base(torch.nn.Module):
                         break
                     if prev_frame_idx >0 and prev_frame_idx not in long_list:  
 
-                        frame_output = output_dict["frame_score_for_mem"].get(prev_frame_idx)
-                        if frame_output is not None: 
-                            iou_score = frame_output["best_iou_score"]  # Get mask affinity score
-                            obj_score = frame_output["object_score_logits"]  # Get object score
-                            kf_score = frame_output["kf_score"] if "kf_score" in frame_output else None  # Get motion score if available
-                            rvcot_ious = frame_output["rvcot_ious"] if "rvcot_ious" in frame_output else None  # Get motion score if available
+                        frame_output = output_dict["frame_score_for_mem"].get(prev_frame_idx) 
+                        iou_score = frame_output["best_iou_score"]  # Get mask affinity score
+                        obj_score = frame_output["object_score_logits"]  # Get object score
+                        kf_score = frame_output["kf_score"] if "kf_score" in frame_output else None  # Get motion score if available
+                        rvcot_ious = frame_output["rvcot_ious"] if "rvcot_ious" in frame_output else None  # Get motion score if available
 
-                            # Check if the scores meet the criteria for being a valid index
-                            if iou_score > self.memory_bank_iou_threshold and \
-                            obj_score > self.memory_bank_obj_score_threshold and \
-                            (kf_score is None or kf_score > self.memory_bank_kf_score_threshold) and \
-                            (rvcot_ious is None or rvcot_ious > self.memory_bank_rvcot_iou_threshold):
-                                # if not self.rvcot_inteveal_intlike:
-                                short_list.append(prev_frame_idx)      
-                                lst = prev_frame_idx 
-                                i-=1   
-                                # # else:
-                                # if len(short_list) == 0:
-                                #     short_list.append(prev_frame_idx)      
-                                #     lst = prev_frame_idx//r*r+r+1
-                                #     i-=1
-                                # else:
-                                #     if prev_frame_idx%r ==0:
-                                #         short_list.append(prev_frame_idx)      
-                                #         lst = prev_frame_idx+1
-                                #         i-=1
+                        # Check if the scores meet the criteria for being a valid index
+                        if iou_score > self.memory_bank_iou_threshold and \
+                        obj_score > self.memory_bank_obj_score_threshold and \
+                        (kf_score is None or kf_score > self.memory_bank_kf_score_threshold) and \
+                        (rvcot_ious is None or rvcot_ious > self.memory_bank_rvcot_iou_threshold):
+                            # if not self.rvcot_inteveal_intlike:
+                            short_list.append(prev_frame_idx)      
+                            lst = prev_frame_idx 
+                            i-=1   
+                            # # else:
+                            # if len(short_list) == 0:
+                            #     short_list.append(prev_frame_idx)      
+                            #     lst = prev_frame_idx//r*r+r+1
+                            #     i-=1
+                            # else:
+                            #     if prev_frame_idx%r ==0:
+                            #         short_list.append(prev_frame_idx)      
+                            #         lst = prev_frame_idx+1
+                            #         i-=1
                 short_list.sort()
                 for frame_idx in long_list:  # Iterate over the number of mask memories
                     out = output_dict["non_cond_frame_outputs"].get(frame_idx, None)  # Get output for the valid index
                     if out is None:  # If not found, check unselected outputs
-                        out = unselected_cond_outputs.get(frame_idx, None)
+                        out = unselected_cond_outputs.get(valid_indices[idx], None)
                     t_pos_and_prevs.append((0, out))
                 for t_pos, frame_idx in enumerate(short_list):
                     out = output_dict["non_cond_frame_outputs"].get(frame_idx, None)  # Get output for the valid index
                     if out is None:  # If not found, check unselected outputs
-                        out = unselected_cond_outputs.get(frame_idx, None)
+                        out = unselected_cond_outputs.get(valid_indices[idx], None)
                     # if not self.rcvot_idxreverse:
                     # t_pos_and_prevs.append((t_pos+1, out))
                     # else:
