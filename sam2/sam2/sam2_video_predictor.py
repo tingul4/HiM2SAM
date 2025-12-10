@@ -49,7 +49,10 @@ class SAM2VideoPredictor(SAM2Base):
         offload_video_to_cpu=False,
         offload_state_to_cpu=False,
         async_loading_frames=False,
-        reverse=False
+        reverse=False,
+        start=0,
+        end=0,
+        is_reverse=1
     ):
         """Initialize an inference state."""
         # read the video / images & backbone frame0
@@ -60,7 +63,10 @@ class SAM2VideoPredictor(SAM2Base):
             offload_video_to_cpu=offload_video_to_cpu,
             async_loading_frames=async_loading_frames,
             compute_device=compute_device,
-            reverse=reverse
+            reverse=reverse,
+            start=start,
+            end=end,
+            is_reverse=is_reverse
         )
         inference_state = {}
         #add for point tracker 

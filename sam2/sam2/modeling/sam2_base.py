@@ -669,7 +669,7 @@ class SAM2Base(torch.nn.Module):
                     rvcot_ious = self.rvcot_filter.predict(frame_idx, inference_state,high_res_multimasks,
                                                            iou_aggregation_method = self.rvcot_iou_aggregation_method,
                                                            sample_count=self.sample_count)
-                    print('rvcot',frame_idx)
+                    # print('rvcot',frame_idx)
                     rvcot_weighted_ious = self.rvcot_weight * rvcot_ious + (1-self.rvcot_weight)* ious
                     best_iou_inds = torch.argmax(rvcot_weighted_ious, dim=-1)
                     batch_inds = torch.arange(B, device=device)
@@ -706,7 +706,7 @@ class SAM2Base(torch.nn.Module):
                     rvcot_ious = self.rvcot_filter.predict(frame_idx, inference_state,high_res_multimasks,
                                                            iou_aggregation_method = self.rvcot_iou_aggregation_method,
                                                            sample_count = self.sample_count)
-                    print('rvcot',frame_idx)
+                    # print('rvcot',frame_idx)
                     rvcot_weighted_ious = self.rvcot_weight * rvcot_ious + (1-self.rvcot_weight)* weighted_ious
                     best_iou_inds = torch.argmax(rvcot_weighted_ious, dim=-1)
                 batch_inds = torch.arange(B, device=device)
@@ -1070,6 +1070,8 @@ class SAM2Base(torch.nn.Module):
                     if prev_frame_idx >0 and prev_frame_idx not in long_list:  
 
                         frame_output = output_dict["frame_score_for_mem"].get(prev_frame_idx) 
+                        if frame_output is None:
+                            continue
                         iou_score = frame_output["best_iou_score"]  # Get mask affinity score
                         obj_score = frame_output["object_score_logits"]  # Get object score
                         kf_score = frame_output["kf_score"] if "kf_score" in frame_output else None  # Get motion score if available
@@ -1098,12 +1100,12 @@ class SAM2Base(torch.nn.Module):
                 for frame_idx in long_list:  # Iterate over the number of mask memories
                     out = output_dict["non_cond_frame_outputs"].get(frame_idx, None)  # Get output for the valid index
                     if out is None:  # If not found, check unselected outputs
-                        out = unselected_cond_outputs.get(valid_indices[idx], None)
+                        out = unselected_cond_outputs.get(frame_idx, None)
                     t_pos_and_prevs.append((0, out))
                 for t_pos, frame_idx in enumerate(short_list):
                     out = output_dict["non_cond_frame_outputs"].get(frame_idx, None)  # Get output for the valid index
                     if out is None:  # If not found, check unselected outputs
-                        out = unselected_cond_outputs.get(valid_indices[idx], None)
+                        out = unselected_cond_outputs.get(frame_idx, None)
                     # if not self.rcvot_idxreverse:
                     # t_pos_and_prevs.append((t_pos+1, out))
                     # else:

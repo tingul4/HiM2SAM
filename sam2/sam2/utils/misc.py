@@ -179,7 +179,10 @@ def load_video_frames(
     img_std=(0.229, 0.224, 0.225),
     async_loading_frames=False,
     compute_device=torch.device("cuda"),
-    reverse=False
+    reverse=False,
+    start=0,
+    end=0,
+    is_reverse=1
 ):
     """
     Load the video frames from video_path. The frames are resized to image_size as in
@@ -206,7 +209,10 @@ def load_video_frames(
             img_std=img_std,
             async_loading_frames=async_loading_frames,
             compute_device=compute_device,
-            reverse = reverse
+            reverse = reverse,
+            start=start,
+            end=end,
+            is_reverse=is_reverse
         )
     else:
         raise NotImplementedError(
@@ -222,7 +228,10 @@ def load_video_frames_from_jpg_images(
     img_std=(0.229, 0.224, 0.225),
     async_loading_frames=False,
     compute_device=torch.device("cuda"),
-    reverse=False
+    reverse=False,
+    start=0,
+    end=0,
+    is_reverse=1
 ):
     """
     Load the video frames from a directory of JPEG files ("<frame_index>.jpg" format).
@@ -254,7 +263,13 @@ def load_video_frames_from_jpg_images(
     if reverse:
         print('load in reverse order')
         frame_names = frame_names[::-1]
+    # 支援 frame 分割 
+    if start !=0 or end !=0:
+        frame_names = frame_names[start:end:is_reverse]
+    
+    
     num_frames = len(frame_names)
+    print(f'Number of frames to load: {num_frames}')
     if num_frames == 0:
         raise RuntimeError(f"no images found in {jpg_folder}")
     img_paths = [os.path.join(jpg_folder, frame_name) for frame_name in frame_names]
